@@ -153,7 +153,6 @@ router.post(
   requireStaffRole,
   async (req, res) => {
     const { typeOf, ...noticeData } = req.body;
-
     try {
       // Create a new notice with the provided data
       const notice = new Notice(noticeData);
@@ -180,7 +179,7 @@ router.post(
           to: user.email,
           subject: `Important ${typeOf} Information`,
           text: `Dear ${user.firstName} ${user.lastName},\n\nWe have important ${typeOf} information to share with you.`,
-          html: `<p>You received a mail for ${typeOf}.</p>`,
+          html: noticeData.viewPage,
         };
 
         // Send the email
