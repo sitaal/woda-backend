@@ -355,7 +355,29 @@ router.get("/donations", requireLogin, requireStaffRole, async (req, res) => {
         },
       },
       {
+        $unwind: "$donationDetails",
+      },
+      {
+        $lookup: {
+          from: "notices",
+          localField: "donationDetails.notice_id",
+          foreignField: "_id",
+          as: "noticeDetails",
+        },
+      },
+      {
+        $unwind: "$noticeDetails",
+      },
+      {
         $addFields: {
+          "donationDetails.details": "$noticeDetails.details",
+        },
+      },
+      {
+        $group: {
+          _id: "$_id",
+          userDetails: { $first: "$userDetails" },
+          donations: { $push: "$donationDetails" },
           totalAmountDonated: { $sum: "$donationDetails.amount" },
         },
       },
@@ -364,7 +386,7 @@ router.get("/donations", requireLogin, requireStaffRole, async (req, res) => {
           "userDetails.email": 1,
           "userDetails.firstName": 1,
           "userDetails.lastName": 1,
-          "donationDetails.amount": 1,
+          donations: 1,
           totalAmountDonated: 1,
         },
       },
@@ -391,7 +413,13 @@ router.get("/donations/:email", async (req, res) => {
     // Find the donation list for the user
     const donationList = await DonationList.findOne({
       user: user._id,
-    }).populate("donations");
+    }).populate({
+      path: "donations",
+      populate: {
+        path: "notice_id",
+        model: "Notice",
+      },
+    });
 
     if (!donationList) {
       return res.status(404).json({ message: "Donation list not found" });
@@ -407,7 +435,10 @@ router.get("/donations/:email", async (req, res) => {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      donationList: donationList.donations,
+      donationList: donationList.donations.map((donation) => ({
+        amount: donation.amount,
+        details: donation.notice_id ? donation.notice_id.details : "",
+      })),
       totalAmountDonated,
     });
   } catch (error) {
@@ -419,7 +450,7 @@ router.get("/donations/:email", async (req, res) => {
 router.post("/donate", async (req, res) => {
   try {
     const { email } = req.query;
-    const { amount, firstName, lastName, phone } = req.body;
+    const { amount, firstName, lastName, phone, notice_id } = req.body;
 
     // Find the user by email
     let user = await User.findOne({ email });
@@ -440,13 +471,15 @@ router.post("/donate", async (req, res) => {
 
       user.news = news._id;
       await user.save();
+
       const msg = {
-        to: email, // Change to your recipient
-        from: config.emailId, // Change to your verified sender
+        to: email,
+        from: config.emailId,
         subject: "Thank you for donating.",
         text: "Welcome to Mero-woda",
-        html: `<p>Hello ${firstName} ${lastName},<br></p><p>Thank you for a generous donation of $${amount}. We have included you in our system. If you would like to get notified about various activities. Please visit the site and get signed up.</p><p>If you did not request this, please ignore this email.</p>`,
+        html: `<p>Hello ${firstName} ${lastName},<br></p><p>Thank you for a generous donation of $${amount}. We have included you in our system. If you would like to get notified about various activities, please visit the site and sign up.</p><p>If you did not request this, please ignore this email.</p>`,
       };
+
       sgMail
         .send(msg)
         .then(() => {
@@ -457,12 +490,13 @@ router.post("/donate", async (req, res) => {
         });
     } else {
       const msg = {
-        to: email, // Change to your recipient
-        from: config.emailId, // Change to your verified sender
+        to: email,
+        from: config.emailId,
         subject: "Thank you for donating.",
         text: "Your contribution means a lot.",
         html: `<p>Hello ${user.firstName} ${user.lastName},<br></p><p>Thank you for a generous donation of $${amount}.</p><p>If you did not request this, please ignore this email.</p>`,
       };
+
       sgMail
         .send(msg)
         .then(() => {
@@ -473,8 +507,13 @@ router.post("/donate", async (req, res) => {
         });
     }
 
-    // Create a new donation
-    const donation = new Donation({ amount });
+    // Create a new donation with notice_id field
+    const notice = await Notice.findById(notice_id); // Find the notice using notice_id
+    if (!notice) {
+      return res.status(404).json({ error: "Notice not found" });
+    }
+
+    const donation = new Donation({ amount, notice_id: notice._id });
     await donation.save();
 
     // Update the user's donation list
