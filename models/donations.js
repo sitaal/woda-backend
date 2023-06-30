@@ -3,6 +3,10 @@ const mongoose = require("mongoose");
 const donationSchema = new mongoose.Schema({
   amount: Number,
   createdAt: { type: Date, default: Date.now },
+  notice_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Notice",
+  },
 });
 
 const Donation = mongoose.model("Donation", donationSchema);
