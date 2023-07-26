@@ -10,6 +10,10 @@ const allNewsSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
   startDate: {
     type: Date,
     required: true,

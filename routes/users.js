@@ -172,7 +172,12 @@ router.post(
       // Send email to each associated user
       for (const newsEntry of newsEntries) {
         const user = newsEntry.user;
-
+        if (!user || !user.email) {
+          console.error(
+            `Invalid user or email not available for newsEntry with ID: ${newsEntry._id}`
+          );
+          continue; // Skip this entry and continue to the next one
+        }
         // Create the email content
         const mailOptions = {
           from: config.emailId,
@@ -274,8 +279,10 @@ router.post("/notice/:id/signup", async (req, res) => {
 
 router.get("/notices", requireLogin, requireStaffRole, async (req, res) => {
   try {
-    // Find all notice entries
-    const notices = await Notice.find().populate("users");
+    // Find all notice entries and sort them by the most recent createdAt date (latest first)
+    const notices = await Notice.find()
+      .populate("users")
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       notices: notices,
@@ -285,6 +292,7 @@ router.get("/notices", requireLogin, requireStaffRole, async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
 router.get("/public-notices", async (req, res) => {
   try {
     // Find all notice entries
